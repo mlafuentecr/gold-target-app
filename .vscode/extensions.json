@@ -1,0 +1,73 @@
+{
+  "recommendations": [
+    // ============================================================
+    // PHP / Symfony Development
+    // ============================================================
+    // "bmewburn.vscode-intelephense-client",     // PHP IntelliSense & static analysis
+    // "TheNouillet.symfony-vscode",               // Symfony framework support
+    // "mblode.twig-language-2",                   // Twig syntax highlighting
+    // "neilbrayfield.php-docblocker",             // Auto-generate PHP DocBlocks
+    // "MehediDracula.php-namespace-resolver",     // Auto import PHP namespaces
+    // "junstyle.php-cs-fixer",                    // PHP CS Fixer formatting
+    // "xdebug.php-debug",                         // PHP debugging (Xdebug)
+
+    // ============================================================
+    // Laravel / Blade (optional)
+    // ============================================================
+    // "shufo.vscode-blade-formatter", // Blade template formatting
+    // "amirmarmul.laravel-blade-vscode", // Enhanced Blade support
+    // "onecentlin.laravel-extension-pack", // Complete Laravel dev pack
+    // "ryannaddy.laravel-artisan", // Laravel Artisan commands
+
+    // ============================================================
+    // JavaScript / TypeScript
+    // ============================================================
+    "dbaeumer.vscode-eslint", // ESLint for JS/TS
+    "esbenp.prettier-vscode", // Code formatting
+    "christian-kohler.npm-intellisense", // NPM dependency autocomplete
+
+    // ============================================================
+    // HTML / CSS / Tailwind
+    // ============================================================
+    "formulahendry.auto-rename-tag", // Auto-rename HTML tags
+    "formulahendry.auto-close-tag", // Auto-close HTML tags
+    "bradlc.vscode-tailwindcss", // Tailwind CSS support
+    "stylelint.vscode-stylelint", // CSS/SCSS linting
+    "mrmlnc.vscode-scss", // SCSS IntelliSense
+
+    // ============================================================
+    // Git
+    // ============================================================
+    "eamodio.gitlens", // Enhanced Git features
+    "mhutchie.git-graph", // Git history visualization
+
+    // ============================================================
+    // Code Quality
+    // ============================================================
+    "editorconfig.editorconfig", // EditorConfig support
+    "streetsidesoftware.code-spell-checker", // Spell checking
+    "naumovs.color-highlight", // Color highlighting
+    "wayou.vscode-todo-highlight", // TODO highlighting
+    "aaron-bond.better-comments", // Enhanced comments
+
+    // ============================================================
+    // UI / Themes
+    // ============================================================
+    "vscode-icons-team.vscode-icons", // File icons
+    "wesbos.theme-cobalt2", // Cobalt2 theme
+    "pkief.material-icon-theme", // Material icons
+
+    // ============================================================
+    // Productivity
+    // ============================================================
+    "yzhang.markdown-all-in-one", // Markdown support
+    "christian-kohler.path-intellisense", // Path autocomplete
+    "visualstudioexptteam.vscodeintellicode" // AI-assisted development
+
+    // ============================================================
+    // WordPress
+    // ============================================================
+    // "wordpresstoolbox.wordpress-toolbox", // WordPress snippets
+    // "tungvn.wordpress-snippet" // Additional WP snippets
+  ]
+}

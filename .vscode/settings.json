@@ -1,0 +1,278 @@
+{
+  // =========================
+  // Editor Settings
+  // =========================
+  "editor.fontFamily": "JetBrains Mono, Fira Code, monospace",
+  "editor.fontSize": 16,
+  "editor.lineHeight": 26,
+  "editor.fontLigatures": true,
+
+  "editor.tabSize": 2,
+  "editor.wordWrap": "on",
+  "editor.wordWrapColumn": 120,
+  "editor.renderWhitespace": "boundary",
+
+  "editor.bracketPairColorization.enabled": true,
+  "editor.guides.bracketPairs": true,
+
+  "editor.cursorStyle": "line",
+  "editor.cursorBlinking": "smooth",
+  "editor.cursorSmoothCaretAnimation": "on",
+
+  "editor.renderLineHighlight": "all",
+  "editor.formatOnSave": true,
+
+  "editor.quickSuggestions": {
+    "other": true,
+    "comments": false,
+    "strings": true
+  },
+
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "explicit",
+    "source.organizeImports": "explicit"
+  },
+
+  "editor.minimap.enabled": false,
+  "editor.smoothScrolling": true,
+
+  // =========================
+  // Terminal Settings
+  // =========================
+  "terminal.integrated.fontSize": 14,
+  "terminal.integrated.cursorStyle": "line",
+  "terminal.integrated.cursorBlinking": true,
+  "terminal.integrated.defaultProfile.windows": "Git Bash",
+
+  // =========================
+  // Blade Formatter
+  // =========================
+  "[blade]": {
+    "editor.defaultFormatter": "shufo.vscode-blade-formatter",
+    "editor.formatOnSave": true
+  },
+
+  // =========================
+  // PHP Intelephense
+  // =========================
+  "intelephense.files.associations": ["*.php", "*.blade.php"],
+  "intelephense.environment.phpVersion": "8.1",
+  "intelephense.completion.triggerParameterHints": true,
+  "intelephense.completion.insertUseDeclaration": true,
+
+  // =========================
+  // File Associations
+  // =========================
+  "files.associations": {
+    "*.php": "php",
+    "*.blade.php": "blade",
+    "wp-config.php": "php",
+    "*.css": "css",
+    "*.js": "javascript",
+    "*.scss": "scss",
+    "*.json": "jsonc"
+  },
+
+  // =========================
+  // Emmet
+  // =========================
+  "emmet.includeLanguages": {
+    "blade": "html",
+    "html": "html",
+    "javascript": "javascriptreact",
+    "php": "html"
+  },
+  "emmet.triggerExpansionOnTab": true,
+
+  // =========================
+  // Prettier
+  // =========================
+  "prettier.useTabs": false,
+  "prettier.singleQuote": true,
+  "prettier.printWidth": 100,
+  "prettier.arrowParens": "avoid",
+  "prettier.endOfLine": "lf",
+  "prettier.jsxSingleQuote": true,
+  "prettier.trailingComma": "es5",
+
+  // =========================
+  // ESLint
+  // =========================
+  "eslint.format.enable": true,
+  "eslint.run": "onSave",
+  "eslint.workingDirectories": ["./src"],
+  "eslint.validate": ["javascript", "javascriptreact", "typescript", "typescriptreact"],
+
+  // =========================
+  // Language Formatters
+  // =========================
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[html]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[css]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[scss]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[php]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "amirmarmul.laravel-blade-vscode"
+  },
+
+  // =========================
+  // Git
+  // =========================
+  "git.ignoreLimitWarning": true,
+  "git.enableSmartCommit": true,
+  "git.confirmSync": false,
+
+  // =========================
+  // Workbench
+  // =========================
+  "workbench.iconTheme": "vscode-icons",
+  "workbench.colorTheme": "Default Dark Modern",
+  "workbench.startupEditor": "newUntitledFile",
+
+  // =========================
+  // Token Colors (UNIFICADO)
+  // =========================
+  "editor.tokenColorCustomizations": {
+    "[Default Dark Modern]": {
+      "textMateRules": [
+        {
+          "scope": "comment",
+          "settings": {
+            "foreground": "#6A9955",
+            "fontStyle": "italic"
+          }
+        },
+        {
+          "scope": "keyword",
+          "settings": {
+            "foreground": "#569CD6"
+          }
+        },
+        {
+          "scope": "string",
+          "settings": {
+            "foreground": "#CE9178"
+          }
+        },
+        {
+          "scope": "variable",
+          "settings": {
+            "foreground": "#9CDCFE"
+          }
+        },
+        {
+          "scope": "support.type.property-name",
+          "settings": {
+            "foreground": "#8B7F74"
+          }
+        }
+      ]
+    }
+  },
+  // =========================
+  // FRONTEND – BARRAS AZULES
+  // =========================
+  "workbench.colorCustomizations": {
+    "titleBar.activeBackground": "#0D3B66",
+    "titleBar.activeForeground": "#FFFFFF",
+
+    "titleBar.inactiveBackground": "#102A43",
+    "titleBar.inactiveForeground": "#AFCBFF",
+    "activityBar.background": "#0D3B66",
+    "activityBar.foreground": "#FFFFFF",
+
+    "sideBar.background": "#102A43",
+    "sideBar.foreground": "#D6E2F0",
+
+    "statusBar.background": "#1F6AE1",
+    "statusBar.foreground": "#FFFFFF",
+
+    "tab.activeForeground": "#FFFFFF",
+    "tab.inactiveForeground": "#AFCBFF",
+
+    "panel.background": "#102A43",
+    "terminal.foreground": "#D6E2F0"
+  },
+  // =========================
+  // BACKEND – BARRAS ROJAS (BASE + LIGHT)
+  // =========================
+  "workbench.colorCustomizations": {
+    "titleBar.activeBackground": "#1524c2",
+    "titleBar.activeForeground": "#FFFFFF",
+
+    "titleBar.inactiveBackground": "#1f1f3a",
+    "titleBar.inactiveForeground": "#BFA3A3",
+
+    "activityBar.background": "#19152a",
+    "activityBar.foreground": "#F2DCDC",
+
+    "sideBar.background": "#201f3a",
+    "sideBar.foreground": "#F2DCDC",
+
+    "statusBar.background": "#4a4cb8",
+    "statusBar.foreground": "#FFFFFF",
+
+    "tab.activeForeground": "#F2DCDC",
+    "tab.inactiveForeground": "#BFA3A3",
+
+    "panel.background": "#1f253a",
+    "terminal.foreground": "#F2DCDC"
+  },
+  // =========================
+  // HTML & Sass
+  // =========================
+  "html.format.indentInnerHtml": true,
+  "html.format.wrapAttributes": "auto",
+
+  "liveSassCompile.settings.formats": [
+    {
+      "format": "compressed",
+      "extensionName": ".min.css",
+      "savePath": "~/css"
+    }
+  ],
+  "liveSassCompile.settings.autoprefix": true,
+
+  // =========================
+  // Blade Formatter
+  // =========================
+  "bladeFormatter.format.sortTailwindcssClasses": true,
+  "bladeFormatter.format.wrapAttributes": "auto",
+
+  // =========================
+  // PHP
+  // =========================
+  "php.validate.enable": true,
+  "php.suggest.basic": false,
+
+  // =========================
+  // Misc
+  // =========================
+  "explorer.confirmDelete": false,
+  "auto-rename-tag.activationOnLanguage": ["*"],
+  "diffEditor.ignoreTrimWhitespace": false,
+  "javascript.updateImportsOnFileMove.enabled": "always",
+
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/bower_components": true,
+    "**/vendor": true
+  }
+}
