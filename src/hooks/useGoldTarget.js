@@ -1,35 +1,41 @@
 /**
  * useGoldTarget.js — Hook principal de datos de la app
  *
- * Mejoras respecto a la versión anterior:
- * - getGoldQuote: precio enriquecido (change %, 52-week range) en una sola llamada
- * - Promise.all: fetch paralelo de quote + series + indicadores (más rápido)
- * - AbortController: limpieza al desmontar o cambiar timeframe
- * - Auto-refresh cada 2 min (solo cuando el mercado está abierto)
- * - refresh(): función manual para re-fetch bajo demanda
- * - lastUpdated: timestamp del último fetch exitoso
- * - Alertas: checkAlerts + sendNotification integrados
- * - Indicadores: RSI(14), EMA9, EMA21 desde TwelveData
+ * ARQUITECTURA DIVIDIDA EN DOS EFFECTS (fix del error 429 de TwelveData):
+ *
+ * Effect 1 — "Price Refresh" [retryCount]
+ *   → Llama SOLO getGoldSpot() de GoldAPI.io
+ *   → 0 créditos TwelveData por refresh de precio
+ *   → Calcula targets y pivots del OHLC diario del spot
+ *   → Chequea alarma de rebote (Zustand) y alertas de precio (localStorage)
+ *   → Auto-refresh cada 2 min (solo mercado abierto)
+ *
+ * Effect 2 — "Indicators Refresh" [timeframe]
+ *   → Llama RSI + EMA9 + EMA21 + time_series a TwelveData
+ *   → Solo corre cuando el usuario CAMBIA el timeframe
+ *   → 4 créditos TwelveData — una sola vez por cambio
+ *   → Actualiza indicators y ATR sin tocar el precio
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import { getGoldSpot } from '../api/goldApi';
 import {
   getGoldDaily,
   getGoldEMA,
   getGoldIntraday,
-  getGoldQuote,
   getGoldRSI,
 } from '../api/twelveData';
 import {
   calculateATR,
   calculatePivotPoints,
-  calculateTargets,
   getPriceStatus,
 } from '../services/goldTarget.service';
+import { useGoldStore } from '../store/goldStore';
 import { extractOHLC } from '../utils/ohlc';
 import {
-  checkAlerts,
   addAlert as persistAddAlert,
+  checkAlerts,
   getAlerts,
   removeAlert as persistRemoveAlert,
   requestNotificationPermission,
@@ -38,116 +44,101 @@ import {
 import { isMarketOpen } from '../utils/marketTime';
 import { isValidNumber } from '../utils/validate';
 
-// Mapeo de timeframe de la UI al intervalo de TwelveData para indicadores
-const TF_INTERVAL = { '1H': '1min', '4H': '15min', '1D': '1day' };
-
-// Intervalo de auto-refresh en milisegundos (2 minutos)
-const REFRESH_INTERVAL_MS = 2 * 60 * 1000;
+// 2 minutos = 30 req/hora (dentro del free plan de GoldAPI.io)
+const PRICE_REFRESH_MS = 2 * 60 * 1000;
 
 export function useGoldTarget() {
-  const [price, setPrice]           = useState(null);
-  const [quoteData, setQuoteData]   = useState(null);  // change, %, 52w
-  const [data, setData]             = useState(null);  // targets, pivots, atr, status
-  const [indicators, setIndicators] = useState(null);  // rsi, ema9, ema21
-  const [timeframe, setTimeframe]   = useState('1D');
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState(null);
+  const [price, setPrice]             = useState(null);
+  const [quoteData, setQuoteData]     = useState(null);   // change, %, prevClose
+  const [data, setData]               = useState(null);   // targets, pivots, atr, status
+  const [indicators, setIndicators]   = useState(null);   // rsi, ema9, ema21
+  const [timeframe, setTimeframe]     = useState('1D');
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
-  const [alerts, setAlerts]         = useState(() => getAlerts());
-  const [retryCount, setRetryCount] = useState(0);
+  const [alerts, setAlerts]           = useState(() => getAlerts());
+  const [retryCount, setRetryCount]   = useState(0);
 
-  // Precio anterior para detectar cruces de alerta
   const prevPriceRef = useRef(null);
 
-  // Pedir permiso de notificaciones al montar (solo una vez)
+  // Zustand: alarma de rebote
+  const { checkBounceAlarm, supportLevel } = useGoldStore();
+
+  // Pedir permiso de notificaciones al montar
   useEffect(() => {
     requestNotificationPermission();
   }, []);
 
-  // ── Fetch principal ────────────────────────────────────────────────────────
+  // ── Effect 1: Price Refresh — GoldAPI.io ──────────────────────────────────
+  // Solo depende de retryCount (NO de timeframe).
+  // El auto-refresh y el botón refresh incrementan retryCount.
+  // TwelveData NO es llamado aquí → elimina el error 429.
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
 
-    async function fetchSeries() {
-      if (timeframe === '1H') return getGoldIntraday('1min', 60, signal);
-      if (timeframe === '4H') return getGoldIntraday('15min', 16, signal);
-      return getGoldDaily(signal);
-    }
-
-    // Intervalo de TwelveData para indicadores
-    // Los endpoints de indicadores no aceptan '1min', usar '1h' para 1H
-    function indicatorInterval() {
-      if (timeframe === '1H') return '1h';
-      if (timeframe === '4H') return '4h';
-      return '1day';
-    }
-
-    async function load() {
+    async function loadPrice() {
       try {
-        setLoading(true);
         setError(null);
 
-        // ── Fetch paralelo: quote + series + indicadores ──────────────────
-        const tfInterval = indicatorInterval();
+        const spot = await getGoldSpot(signal);
 
-        const [quoteJson, seriesJson, rsiJson, ema9Json, ema21Json] = await Promise.all([
-          getGoldQuote(signal),
-          fetchSeries(),
-          getGoldRSI(tfInterval, signal).catch(() => null),   // indicadores no bloquean
-          getGoldEMA(tfInterval, 9, signal).catch(() => null),
-          getGoldEMA(tfInterval, 21, signal).catch(() => null),
-        ]);
-
-        // ── Validar quote ─────────────────────────────────────────────────
-        const livePrice = Number(quoteJson?.close ?? quoteJson?.price);
+        // Validar precio
+        const livePrice = Number(spot.price);
         if (!isValidNumber(livePrice)) {
-          throw new Error('Invalid price data from API');
+          throw new Error('GoldAPI devolvió un precio inválido');
         }
 
-        // ── Validar series (fallback a diario si falla intraday) ──────────
-        let series = seriesJson;
-        if (!series?.values?.length) {
-          console.warn(`No ${timeframe} data, fallback → DAILY`);
-          series = await getGoldDaily(signal);
-        }
-        if (!series?.values?.length) {
-          throw new Error('Market data unavailable');
-        }
+        // OHLC diario del spot (open/high/low/price)
+        const open  = Number(spot.open_price);
+        const high  = Number(spot.high_price);
+        const low   = Number(spot.low_price);
+        const close = livePrice;
+        const range = high - low;
 
-        // ── Calcular targets ──────────────────────────────────────────────
-        const targets = calculateTargets(series);
-        if (!targets) throw new Error('Failed to calculate targets');
+        // Targets (range breakout: Bullish = High + Range, Bearish = Low - Range)
+        const targets = {
+          open:          +open.toFixed(2),
+          high:          +high.toFixed(2),
+          low:           +low.toFixed(2),
+          close:         +close.toFixed(2),
+          bullishTarget: +(high + range).toFixed(2),
+          bearishTarget: +(low  - range).toFixed(2),
+          range:         +range.toFixed(2),
+        };
 
-        const candles  = extractOHLC(series.values);
-        const atr      = calculateATR(candles);
-        const pivots   = calculatePivotPoints(targets.high, targets.low, targets.close);
-        const status   = getPriceStatus(livePrice, targets);
+        const pivots = calculatePivotPoints(high, low, close);
+        const status = getPriceStatus(livePrice, targets);
 
-        // ── Extraer datos del quote ───────────────────────────────────────
-        const change        = Number(quoteJson?.change ?? 0);
-        const percentChange = Number(quoteJson?.percent_change ?? 0);
-        const prevClose     = Number(quoteJson?.previous_close ?? 0);
-        const week52High    = Number(quoteJson?.fifty_two_week?.high ?? 0);
-        const week52Low     = Number(quoteJson?.fifty_two_week?.low ?? 0);
+        // Cambio del día (campos de GoldAPI.io)
+        const change        = Number(spot.ch  ?? 0);
+        const percentChange = Number(spot.chp ?? 0);
+        const prevClose     = Number(spot.prev_close_price ?? 0);
 
-        // ── Extraer indicadores ───────────────────────────────────────────
-        const rsi  = rsiJson?.values?.[0]?.rsi  ? +Number(rsiJson.values[0].rsi).toFixed(1)  : null;
-        const ema9 = ema9Json?.values?.[0]?.ema  ? +Number(ema9Json.values[0].ema).toFixed(2) : null;
-        const ema21= ema21Json?.values?.[0]?.ema ? +Number(ema21Json.values[0].ema).toFixed(2): null;
-
-        // ── Verificar alertas ─────────────────────────────────────────────
+        // ── Alarma de rebote (Zustand store) ─────────────────────────────
         const prevPrice = prevPriceRef.current;
+        const bounced   = checkBounceAlarm(prevPrice, livePrice);
+        if (bounced) {
+          toast.success(
+            `¡Rebote en soporte! Oro en $${livePrice.toFixed(2)} — Posible entrada long 🚀`,
+            { duration: 10000 }
+          );
+          sendNotification(
+            '¡Rebote en soporte alcista! 🚀',
+            `XAU/USD cruzó soporte $${Number(supportLevel).toFixed(2)} → ahora $${livePrice.toFixed(2)}`
+          );
+        }
+
+        // ── Alertas de precio (localStorage) ─────────────────────────────
         if (prevPrice !== null) {
           const activeAlerts = getAlerts();
           const { triggered, remaining } = checkAlerts(livePrice, prevPrice, activeAlerts);
-
           if (triggered.length > 0) {
             triggered.forEach(alert => {
               const dir = alert.direction === 'up' ? '↑' : '↓';
               sendNotification(
                 `Gold Alert ${dir}`,
-                `XAU/USD crossed $${alert.price.toFixed(2)} — now at $${livePrice.toFixed(2)}`
+                `XAU/USD cruzó $${alert.price.toFixed(2)} → ahora $${livePrice.toFixed(2)}`
               );
             });
             setAlerts(remaining);
@@ -155,57 +146,108 @@ export function useGoldTarget() {
         }
         prevPriceRef.current = livePrice;
 
-        // ── Actualizar estado ─────────────────────────────────────────────
+        // Actualizar estado (preservando atr e indicators del último fetch de timeframe)
         setPrice(livePrice);
         setQuoteData({
           change:        isValidNumber(change) ? +change.toFixed(2) : 0,
           percentChange: isValidNumber(percentChange) ? +percentChange.toFixed(2) : 0,
-          prevClose:     isValidNumber(prevClose) ? +prevClose.toFixed(2) : null,
-          week52High:    isValidNumber(week52High) && week52High > 0 ? +week52High.toFixed(2) : null,
-          week52Low:     isValidNumber(week52Low)  && week52Low > 0  ? +week52Low.toFixed(2)  : null,
+          prevClose:     isValidNumber(prevClose) && prevClose > 0 ? +prevClose.toFixed(2) : null,
+          week52High:    null,  // GoldAPI.io free no proporciona datos de 52 semanas
+          week52Low:     null,
         });
-        setData({ ...targets, atr, pivots, status });
-        setIndicators({ rsi, ema9, ema21 });
+        setData(prev => ({
+          ...targets,
+          atr:    prev?.atr    ?? null,
+          pivots,
+          status,
+        }));
         setLastUpdated(Date.now());
 
       } catch (err) {
-        if (err.name === 'AbortError') return; // cancelación limpia, no es un error
-        console.error('GoldTarget fetch error:', err.message);
-        setError(err.message || 'Market data temporarily unavailable');
+        if (err.name === 'AbortError') return;
+        console.error('GoldAPI price error:', err.message);
+        setError(err.message || 'Error al obtener precio de GoldAPI.io');
       } finally {
         setLoading(false);
       }
     }
 
-    load();
+    loadPrice();
     return () => controller.abort();
-  }, [timeframe, retryCount]);
+  }, [retryCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Auto-refresh cada 2 minutos (solo mercado abierto) ────────────────────
+  // ── Effect 2: Indicators Refresh — TwelveData ────────────────────────────
+  // Solo corre al CAMBIAR el timeframe (no en el polling de precio).
+  // Esto limita TwelveData a ~4 créditos por cambio de timeframe → sin 429.
+  useEffect(() => {
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    function indicatorInterval() {
+      if (timeframe === '1H') return '1h';
+      if (timeframe === '4H') return '4h';
+      return '1day';
+    }
+
+    async function loadIndicators() {
+      try {
+        const tfInterval = indicatorInterval();
+
+        const fetchSeries = () => {
+          if (timeframe === '1H') return getGoldIntraday('1min', 60, signal);
+          if (timeframe === '4H') return getGoldIntraday('15min', 16, signal);
+          return getGoldDaily(signal);
+        };
+
+        const [seriesJson, rsiJson, ema9Json, ema21Json] = await Promise.all([
+          fetchSeries(),
+          getGoldRSI(tfInterval, signal).catch(() => null),
+          getGoldEMA(tfInterval, 9, signal).catch(() => null),
+          getGoldEMA(tfInterval, 21, signal).catch(() => null),
+        ]);
+
+        // ATR desde series de velas
+        let atr = null;
+        if (seriesJson?.values?.length) {
+          const candles = extractOHLC(seriesJson.values);
+          atr = calculateATR(candles);
+        }
+
+        const rsi   = rsiJson?.values?.[0]?.rsi   ? +Number(rsiJson.values[0].rsi).toFixed(1)   : null;
+        const ema9  = ema9Json?.values?.[0]?.ema   ? +Number(ema9Json.values[0].ema).toFixed(2)  : null;
+        const ema21 = ema21Json?.values?.[0]?.ema  ? +Number(ema21Json.values[0].ema).toFixed(2) : null;
+
+        setData(prev => prev ? { ...prev, atr } : null);
+        setIndicators({ rsi, ema9, ema21 });
+
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        console.warn('Indicators fetch failed (non-blocking):', err.message);
+        // No bloquea la app si los indicadores fallan
+      }
+    }
+
+    loadIndicators();
+    return () => controller.abort();
+  }, [timeframe]);
+
+  // ── Auto-refresh de precio (solo mercado abierto) ─────────────────────────
   useEffect(() => {
     if (!isMarketOpen()) return;
-
-    const id = setInterval(() => {
-      setRetryCount(c => c + 1);
-    }, REFRESH_INTERVAL_MS);
-
+    const id = setInterval(() => setRetryCount(c => c + 1), PRICE_REFRESH_MS);
     return () => clearInterval(id);
-  }, [timeframe]); // reiniciar al cambiar timeframe
-
-  // ── API pública del hook ──────────────────────────────────────────────────
-
-  const refresh = useCallback(() => {
-    setRetryCount(c => c + 1);
   }, []);
 
+  // ── API pública ───────────────────────────────────────────────────────────
+
+  const refresh = useCallback(() => setRetryCount(c => c + 1), []);
+
   const addAlert = useCallback((price) => {
-    const updated = persistAddAlert(price);
-    setAlerts(updated);
+    setAlerts(persistAddAlert(price));
   }, []);
 
   const removeAlert = useCallback((id) => {
-    const updated = persistRemoveAlert(id);
-    setAlerts(updated);
+    setAlerts(persistRemoveAlert(id));
   }, []);
 
   return {
