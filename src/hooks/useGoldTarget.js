@@ -24,6 +24,7 @@ import {
   getGoldDaily,
   getGoldEMA,
   getGoldIntraday,
+  getGoldQuote,
   getGoldRSI,
 } from '../api/twelveData';
 import {
@@ -55,6 +56,7 @@ export function useGoldTarget() {
   const [timeframe, setTimeframe]     = useState('1D');
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState(null);
+  const [priceSource, setPriceSource] = useState('GoldAPI');
   const [lastUpdated, setLastUpdated] = useState(null);
   const [alerts, setAlerts]           = useState(() => getAlerts());
   const [retryCount, setRetryCount]   = useState(0);
@@ -77,16 +79,49 @@ export function useGoldTarget() {
     const controller = new AbortController();
     const { signal } = controller;
 
+    async function loadPriceFromFallback() {
+      const [quote, daily] = await Promise.all([
+        getGoldQuote(signal),
+        getGoldDaily(signal),
+      ]);
+
+      const currentCandle = daily?.values?.[0];
+      const previousCandle = daily?.values?.[1];
+
+      return {
+        price: Number(quote.price),
+        open_price: Number(currentCandle?.open ?? quote.open),
+        high_price: Number(currentCandle?.high ?? quote.high),
+        low_price: Number(currentCandle?.low ?? quote.low),
+        ch: Number(quote.change ?? 0),
+        chp: Number(quote.percent_change ?? 0),
+        prev_close_price: Number(quote.previous_close ?? previousCandle?.close ?? 0),
+        timestamp: Number(quote.last_quote_at ?? quote.timestamp ?? Date.now() / 1000),
+        sourceLabel: 'TwelveData',
+      };
+    }
+
     async function loadPrice() {
       try {
         setError(null);
 
-        const spot = await getGoldSpot(signal);
+        let spot;
+        let sourceLabel = 'GoldAPI';
+        let providerWarning = null;
+
+        try {
+          spot = await getGoldSpot(signal);
+        } catch (goldApiError) {
+          console.warn('GoldAPI unavailable, switching to TwelveData:', goldApiError.message);
+          spot = await loadPriceFromFallback();
+          sourceLabel = spot.sourceLabel || 'TwelveData';
+          providerWarning = `GoldAPI no disponible (${goldApiError.message}). Usando ${sourceLabel}.`;
+        }
 
         // Validar precio
         const livePrice = Number(spot.price);
         if (!isValidNumber(livePrice)) {
-          throw new Error('GoldAPI devolvió un precio inválido');
+          throw new Error(`${sourceLabel} devolvió un precio inválido`);
         }
 
         // OHLC diario del spot (open/high/low/price)
@@ -161,12 +196,14 @@ export function useGoldTarget() {
           pivots,
           status,
         }));
+        setPriceSource(sourceLabel);
         setLastUpdated(Date.now());
+        setError(providerWarning);
 
       } catch (err) {
         if (err.name === 'AbortError') return;
-        console.error('GoldAPI price error:', err.message);
-        setError(err.message || 'Error al obtener precio de GoldAPI');
+        console.error('Price provider error:', err.message);
+        setError(err.message || 'Error al obtener precio del mercado');
       } finally {
         setLoading(false);
       }
@@ -259,6 +296,7 @@ export function useGoldTarget() {
     setTimeframe,
     loading,
     error,
+    priceSource,
     lastUpdated,
     refresh,
     alerts,
