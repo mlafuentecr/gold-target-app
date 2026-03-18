@@ -9,7 +9,7 @@ Dashboard para monitorear `XAU/USD` con precio live, targets, pivot points, aler
 
 ## Funcionalidades
 
-- Precio live de oro usando GoldAPI.
+- Precio live de oro usando TwelveData.
 - Indicadores técnicos por timeframe: `RSI`, `EMA 9`, `EMA 21`.
 - Cálculo de `bullish target`, `bearish target`, rango y pivot points.
 - Alertas de precio persistidas localmente.
@@ -30,7 +30,6 @@ El proyecto usa un archivo `.env` en la raíz:
 
 ```env
 VITE_TWELVE_API_KEY=tu_twelve_data_key
-VITE_GOLD_API_KEY=tu_gold_api_key
 ```
 
 ## Desarrollo local
@@ -63,6 +62,4 @@ npm run preview
 
 ## Notas
 
-- GoldAPI entrega el precio live de `XAU/USD`.
-- TwelveData se usa para indicadores y series.
-- Si aparece un `403` en GoldAPI, revisa primero que `VITE_GOLD_API_KEY` exista y que la cuenta tenga acceso habilitado.
+- TwelveData entrega precio live, OHLC diario e indicadores de `XAU/USD`.

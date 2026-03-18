@@ -4,8 +4,7 @@
  * ARQUITECTURA DIVIDIDA EN DOS EFFECTS (fix del error 429 de TwelveData):
  *
  * Effect 1 — "Price Refresh" [retryCount]
- *   → Llama SOLO getGoldSpot() de GoldAPI
- *   → 0 créditos TwelveData por refresh de precio
+ *   → Llama a TwelveData para precio + OHLC diario
  *   → Calcula targets y pivots del OHLC diario del spot
  *   → Chequea alarma de rebote (Zustand) y alertas de precio (localStorage)
  *   → Auto-refresh cada 2 min (solo mercado abierto)
@@ -19,7 +18,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { getGoldSpot } from '../api/goldApi';
 import {
   getGoldDaily,
   getGoldEMA,
@@ -56,7 +54,7 @@ export function useGoldTarget() {
   const [timeframe, setTimeframe]     = useState('1D');
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState(null);
-  const [priceSource, setPriceSource] = useState('GoldAPI');
+  const [priceSource, setPriceSource] = useState('TwelveData');
   const [lastUpdated, setLastUpdated] = useState(null);
   const [alerts, setAlerts]           = useState(() => getAlerts());
   const [retryCount, setRetryCount]   = useState(0);
@@ -71,57 +69,40 @@ export function useGoldTarget() {
     requestNotificationPermission();
   }, []);
 
-  // ── Effect 1: Price Refresh — GoldAPI ─────────────────────────────────────
+  // ── Effect 1: Price Refresh — TwelveData ──────────────────────────────────
   // Solo depende de retryCount (NO de timeframe).
   // El auto-refresh y el botón refresh incrementan retryCount.
-  // TwelveData NO es llamado aquí → elimina el error 429.
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
-
-    async function loadPriceFromFallback() {
-      const [quote, daily] = await Promise.all([
-        getGoldQuote(signal),
-        getGoldDaily(signal),
-      ]);
-
-      const currentCandle = daily?.values?.[0];
-      const previousCandle = daily?.values?.[1];
-
-      return {
-        price: Number(quote.price),
-        open_price: Number(currentCandle?.open ?? quote.open),
-        high_price: Number(currentCandle?.high ?? quote.high),
-        low_price: Number(currentCandle?.low ?? quote.low),
-        ch: Number(quote.change ?? 0),
-        chp: Number(quote.percent_change ?? 0),
-        prev_close_price: Number(quote.previous_close ?? previousCandle?.close ?? 0),
-        timestamp: Number(quote.last_quote_at ?? quote.timestamp ?? Date.now() / 1000),
-        sourceLabel: 'TwelveData',
-      };
-    }
 
     async function loadPrice() {
       try {
         setError(null);
 
-        let spot;
-        let sourceLabel = 'GoldAPI';
-        let providerWarning = null;
+        const [quote, daily] = await Promise.all([
+          getGoldQuote(signal),
+          getGoldDaily(signal),
+        ]);
 
-        try {
-          spot = await getGoldSpot(signal);
-        } catch (goldApiError) {
-          console.warn('GoldAPI unavailable, switching to TwelveData:', goldApiError.message);
-          spot = await loadPriceFromFallback();
-          sourceLabel = spot.sourceLabel || 'TwelveData';
-          providerWarning = `GoldAPI no disponible (${goldApiError.message}). Usando ${sourceLabel}.`;
-        }
+        const currentCandle = daily?.values?.[0];
+        const previousCandle = daily?.values?.[1];
+
+        const spot = {
+          price: Number(quote.price),
+          open_price: Number(currentCandle?.open ?? quote.open),
+          high_price: Number(currentCandle?.high ?? quote.high),
+          low_price: Number(currentCandle?.low ?? quote.low),
+          ch: Number(quote.change ?? 0),
+          chp: Number(quote.percent_change ?? 0),
+          prev_close_price: Number(quote.previous_close ?? previousCandle?.close ?? 0),
+          timestamp: Number(quote.last_quote_at ?? quote.timestamp ?? Date.now() / 1000),
+        };
 
         // Validar precio
         const livePrice = Number(spot.price);
         if (!isValidNumber(livePrice)) {
-          throw new Error(`${sourceLabel} devolvió un precio inválido`);
+          throw new Error('TwelveData devolvió un precio inválido');
         }
 
         // OHLC diario del spot (open/high/low/price)
@@ -196,9 +177,8 @@ export function useGoldTarget() {
           pivots,
           status,
         }));
-        setPriceSource(sourceLabel);
+        setPriceSource('TwelveData');
         setLastUpdated(Date.now());
-        setError(providerWarning);
 
       } catch (err) {
         if (err.name === 'AbortError') return;
