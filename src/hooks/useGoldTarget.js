@@ -89,7 +89,7 @@ export function useGoldTarget() {
         const previousCandle = daily?.values?.[1];
 
         const spot = {
-          price: Number(quote.price),
+          price: Number(quote.price ?? quote.close ?? currentCandle?.close),
           open_price: Number(currentCandle?.open ?? quote.open),
           high_price: Number(currentCandle?.high ?? quote.high),
           low_price: Number(currentCandle?.low ?? quote.low),
@@ -168,8 +168,8 @@ export function useGoldTarget() {
           change:        isValidNumber(change) ? +change.toFixed(2) : 0,
           percentChange: isValidNumber(percentChange) ? +percentChange.toFixed(2) : 0,
           prevClose:     isValidNumber(prevClose) && prevClose > 0 ? +prevClose.toFixed(2) : null,
-          week52High:    null,  // Este endpoint no proporciona datos de 52 semanas
-          week52Low:     null,
+          week52High:    isValidNumber(quote?.fifty_two_week?.high) ? +Number(quote.fifty_two_week.high).toFixed(2) : null,
+          week52Low:     isValidNumber(quote?.fifty_two_week?.low) ? +Number(quote.fifty_two_week.low).toFixed(2) : null,
         });
         setData(prev => ({
           ...targets,
