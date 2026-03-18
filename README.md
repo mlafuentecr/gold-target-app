@@ -1,16 +1,68 @@
-# React + Vite
+# Gold Target App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Dashboard para monitorear `XAU/USD` con precio live, targets, pivot points, alertas de precio y alarma de rebote en soporte.
 
-Currently, two official plugins are available:
+## Sitio
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Repositorio: [https://github.com/mlafuentecr/gold-target-app](https://github.com/mlafuentecr/gold-target-app)
+- URL pública: pendiente de confirmar
 
-## React Compiler
+## Funcionalidades
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Precio live de oro usando GoldAPI.
+- Indicadores técnicos por timeframe: `RSI`, `EMA 9`, `EMA 21`.
+- Cálculo de `bullish target`, `bearish target`, rango y pivot points.
+- Alertas de precio persistidas localmente.
+- Alarma de rebote en soporte con notificaciones del navegador.
+- Refresh manual y polling automático cuando el mercado está activo.
 
-## Expanding the ESLint configuration
+## Stack
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- React 19
+- Vite
+- Tailwind CSS 4
+- Zustand
+- Sonner
+
+## Variables de entorno
+
+El proyecto usa un archivo `.env` en la raíz:
+
+```env
+VITE_TWELVE_API_KEY=tu_twelve_data_key
+VITE_GOLD_API_KEY=tu_gold_api_key
+```
+
+## Desarrollo local
+
+```bash
+npm install
+npm run dev
+```
+
+La app abre por defecto en:
+
+```text
+http://localhost:5173
+```
+
+## Build
+
+```bash
+npm run build
+npm run preview
+```
+
+## Estructura principal
+
+- `src/api`: integración con proveedores de datos.
+- `src/hooks/useGoldTarget.js`: orquestación principal de precio, indicadores y alertas.
+- `src/pages/Dashboard.jsx`: UI principal.
+- `src/store/goldStore.js`: estado global para la alarma de soporte.
+- `src/utils`: formato, validaciones, alertas y helpers de mercado.
+
+## Notas
+
+- GoldAPI entrega el precio live de `XAU/USD`.
+- TwelveData se usa para indicadores y series.
+- Si aparece un `403` en GoldAPI, revisa primero que `VITE_GOLD_API_KEY` exista y que la cuenta tenga acceso habilitado.
