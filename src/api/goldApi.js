@@ -1,32 +1,11 @@
 /**
- * goldApi.js — Capa de acceso a GoldAPI.io
+ * goldApi.js — Capa de acceso a GoldAPI
  *
- * Reemplaza getGoldQuote() de TwelveData para el precio live.
- * Ventajas:
- *  - Una sola llamada devuelve precio + OHLC diario + cambio del día
- *  - No consume créditos de TwelveData (evita el error 429)
- *  - Plan gratuito: 30 req/hora (más que suficiente con refresh cada 2 min)
- *
- * Endpoint: GET https://www.goldapi.io/api/XAU/USD
- * Header: x-access-token: <VITE_GOLD_API_KEY>
- *
- * Response: {
- *   price: number,           — precio spot actual
- *   open_price: number,      — apertura del día
- *   high_price: number,      — máximo del día
- *   low_price: number,       — mínimo del día
- *   ch: number,              — cambio absoluto vs cierre anterior
- *   chp: number,             — cambio porcentual
- *   prev_close_price: number,— cierre anterior
- *   ask: number,
- *   bid: number,
- *   timestamp: number,
- * }
- *
- * Error response: { error: true, message: '...' }
+ * La app usa el endpoint público actual documentado en goldapi.net y envía
+ * la clave en el querystring como `x-api-key`.
  */
 
-const GOLD_API_URL = 'https://www.goldapi.io/api/XAU/USD';
+const GOLD_API_URL = 'https://app.goldapi.net/price/XAU/USD';
 const API_KEY = import.meta.env.VITE_GOLD_API_KEY;
 
 // ─── Helper interno ───────────────────────────────────────────────────────────
@@ -36,16 +15,23 @@ async function fetchWithValidation(signal) {
     throw new Error('VITE_GOLD_API_KEY no está configurada en .env');
   }
 
-  const res = await fetch(GOLD_API_URL, {
+  const url = new URL(GOLD_API_URL);
+  url.searchParams.set('x-api-key', API_KEY);
+
+  const res = await fetch(url, {
     signal,
     headers: {
-      'x-access-token': API_KEY,
-      'Content-Type': 'application/json',
+      Accept: 'application/json',
     },
   });
 
   if (!res.ok) {
-    // 401 = API key inválida, 429 = rate limit, 403 = plan insuficiente
+    if (res.status === 401 || res.status === 403) {
+      throw new Error('GoldAPI rechazó la clave o el método de autenticación');
+    }
+    if (res.status === 429) {
+      throw new Error('GoldAPI alcanzó el límite de peticiones');
+    }
     throw new Error(`GoldAPI HTTP ${res.status}: ${res.statusText}`);
   }
 

@@ -4,7 +4,7 @@
  * ARQUITECTURA DIVIDIDA EN DOS EFFECTS (fix del error 429 de TwelveData):
  *
  * Effect 1 — "Price Refresh" [retryCount]
- *   → Llama SOLO getGoldSpot() de GoldAPI.io
+ *   → Llama SOLO getGoldSpot() de GoldAPI
  *   → 0 créditos TwelveData por refresh de precio
  *   → Calcula targets y pivots del OHLC diario del spot
  *   → Chequea alarma de rebote (Zustand) y alertas de precio (localStorage)
@@ -44,7 +44,7 @@ import {
 import { isMarketOpen } from '../utils/marketTime';
 import { isValidNumber } from '../utils/validate';
 
-// 2 minutos = 30 req/hora (dentro del free plan de GoldAPI.io)
+// 2 minutos = 30 req/hora, suficiente para el polling de precio
 const PRICE_REFRESH_MS = 2 * 60 * 1000;
 
 export function useGoldTarget() {
@@ -69,7 +69,7 @@ export function useGoldTarget() {
     requestNotificationPermission();
   }, []);
 
-  // ── Effect 1: Price Refresh — GoldAPI.io ──────────────────────────────────
+  // ── Effect 1: Price Refresh — GoldAPI ─────────────────────────────────────
   // Solo depende de retryCount (NO de timeframe).
   // El auto-refresh y el botón refresh incrementan retryCount.
   // TwelveData NO es llamado aquí → elimina el error 429.
@@ -110,7 +110,7 @@ export function useGoldTarget() {
         const pivots = calculatePivotPoints(high, low, close);
         const status = getPriceStatus(livePrice, targets);
 
-        // Cambio del día (campos de GoldAPI.io)
+        // Cambio del día
         const change        = Number(spot.ch  ?? 0);
         const percentChange = Number(spot.chp ?? 0);
         const prevClose     = Number(spot.prev_close_price ?? 0);
@@ -152,7 +152,7 @@ export function useGoldTarget() {
           change:        isValidNumber(change) ? +change.toFixed(2) : 0,
           percentChange: isValidNumber(percentChange) ? +percentChange.toFixed(2) : 0,
           prevClose:     isValidNumber(prevClose) && prevClose > 0 ? +prevClose.toFixed(2) : null,
-          week52High:    null,  // GoldAPI.io free no proporciona datos de 52 semanas
+          week52High:    null,  // Este endpoint no proporciona datos de 52 semanas
           week52Low:     null,
         });
         setData(prev => ({
@@ -166,7 +166,7 @@ export function useGoldTarget() {
       } catch (err) {
         if (err.name === 'AbortError') return;
         console.error('GoldAPI price error:', err.message);
-        setError(err.message || 'Error al obtener precio de GoldAPI.io');
+        setError(err.message || 'Error al obtener precio de GoldAPI');
       } finally {
         setLoading(false);
       }

@@ -208,7 +208,7 @@ export default function Dashboard() {
               </span>
             )}
           </div>
-          <p className='text-xs text-gray-500 mt-0.5'>Live Price · GoldAPI.io</p>
+                <p className='text-xs text-gray-500 mt-0.5'>Live Price · GoldAPI</p>
 
           {/* Botones timeframe + info de sesión */}
           <div className='flex items-center justify-between mt-4 flex-wrap gap-3'>
