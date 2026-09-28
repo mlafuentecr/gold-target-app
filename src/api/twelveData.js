@@ -13,6 +13,11 @@ import { isValidApiResponse } from '../utils/validate';
 
 const API_KEY  = import.meta.env.VITE_TWELVE_API_KEY;
 const BASE_URL = 'https://api.twelvedata.com';
+// Defaults disponibles en la cuenta actual: dólar local y Treasury 2Y.
+// Para fortaleza global del dólar se puede usar UUP; para un 10Y depende del
+// catálogo/plan del proveedor.
+const DOLLAR_SYMBOL = import.meta.env.VITE_DOLLAR_SYMBOL || 'USD/CRC';
+const BOND_SYMBOL = import.meta.env.VITE_BOND_SYMBOL || 'US2Y';
 
 // ─── Helper interno ───────────────────────────────────────────────────────────
 
@@ -56,6 +61,56 @@ async function fetchWithValidation(url, signal) {
 export async function getGoldQuote(signal) {
   const url = `${BASE_URL}/quote?symbol=XAU/USD&apikey=${API_KEY}`;
   return fetchWithValidation(url, signal);
+}
+
+/**
+ * Devuelve el contexto macro mínimo para interpretar el oro.
+ *
+ * El dólar (por defecto USD/CRC) y un rendimiento Treasury (por defecto US2Y)
+ * aportan contexto para interpretar el oro. Se consultan juntos para gastar
+ * una sola llamada HTTP
+ * (los créditos siguen contando por símbolo en TwelveData).
+ *
+ * Los símbolos se pueden cambiar sin tocar código mediante:
+ * VITE_DOLLAR_SYMBOL y VITE_BOND_SYMBOL.
+ *
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<{ dollar: Object|null, bond: Object|null }>}
+ */
+export async function getMacroQuotes(signal) {
+  const symbols = `${DOLLAR_SYMBOL},${BOND_SYMBOL}`;
+  const url = `${BASE_URL}/quote?symbol=${encodeURIComponent(symbols)}&apikey=${API_KEY}`;
+  const res = await fetch(url, { signal });
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  }
+
+  const json = await res.json();
+  if (json?.status === 'error') {
+    throw new Error(`TwelveData error: ${json.message || json.status}`);
+  }
+
+  // El batch devuelve un objeto indexado por símbolo. Mantener también el
+  // caso de respuesta individual hace la integración tolerante a cambios del
+  // proveedor o a un proxy que reduzca la consulta a un solo símbolo.
+  const getQuote = (symbol) => {
+    const quote = json?.[symbol] || (json?.symbol === symbol ? json : null);
+    return quote && quote.status !== 'error' ? quote : null;
+  };
+
+  const dollar = getQuote(DOLLAR_SYMBOL);
+  const bond = getQuote(BOND_SYMBOL);
+
+  if (!dollar && !bond) {
+    throw new Error('TwelveData no devolvió datos macro válidos');
+  }
+
+  return {
+    dollar,
+    bond,
+    symbols: { dollar: DOLLAR_SYMBOL, bond: BOND_SYMBOL },
+  };
 }
 
 // ─── Series de tiempo ─────────────────────────────────────────────────────────

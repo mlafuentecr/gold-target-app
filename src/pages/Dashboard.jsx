@@ -94,11 +94,36 @@ function StatusBadge({ status }) {
   return <span className='text-xs text-gray-500'>Neutral</span>;
 }
 
+function MacroQuote({ label, value, change, suffix = '', tone = 'neutral' }) {
+  const toneClass = tone === 'positive'
+    ? 'text-green-400'
+    : tone === 'negative'
+      ? 'text-red-400'
+      : 'text-gray-300';
+  const changeClass = change > 0 ? 'text-red-400' : change < 0 ? 'text-green-400' : 'text-gray-500';
+
+  return (
+    <div className='rounded-xl bg-white/5 px-3 py-2.5 min-w-0'>
+      <p className='text-xs text-gray-500'>{label}</p>
+      <div className='flex items-baseline gap-2 mt-1'>
+        <span className={`text-lg font-semibold ${toneClass}`}>
+          {value == null ? '—' : `${value}${suffix}`}
+        </span>
+        {change != null && (
+          <span className={`text-xs font-semibold ${changeClass}`}>
+            {change >= 0 ? '+' : ''}{change.toFixed(2)}%
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Dashboard principal ──────────────────────────────────────────────────────
 
 export default function Dashboard() {
   const {
-    price, quoteData, data, indicators,
+    price, quoteData, macroData, data, indicators,
     timeframe, setTimeframe,
     loading, error, priceSource, lastUpdated, refresh,
     alerts, addAlert, removeAlert,
@@ -115,11 +140,15 @@ export default function Dashboard() {
 
   // Contador "Updated X ago" (local, sin re-fetch)
   const [elapsed, setElapsed] = useState(null);
+  const [now, setNow] = useState(0);
   useEffect(() => {
-    if (!lastUpdated) return;
-    const update = () => setElapsed(Math.floor((Date.now() - lastUpdated) / 1000));
-    update();
-    const id = setInterval(update, 1000);
+    const updateClock = () => {
+      const current = Date.now();
+      setNow(current);
+      if (lastUpdated) setElapsed(Math.floor((current - lastUpdated) / 1000));
+    };
+    updateClock();
+    const id = setInterval(updateClock, 1000);
     return () => clearInterval(id);
   }, [lastUpdated]);
 
@@ -256,7 +285,49 @@ export default function Dashboard() {
         {/* ═══════════════════════════════════════════════════════════════ */}
         <div className='grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4'>
 
-          {/* CARD 2: Indicadores ──────────────────────────────────────── */}
+          {/* CARD 2: Contexto macro ──────────────────────────────────── */}
+          <div className='md:col-span-2 xl:col-span-3 bg-gradient-to-br from-[#1a1b22] to-[#121318] rounded-2xl p-5 shadow-lg'>
+            <div className='flex items-start justify-between gap-3 mb-3'>
+              <div>
+                <p className='text-sm text-gray-400'>Contexto macro del oro</p>
+                <p className='text-xs text-gray-600 mt-1'>Dólar fuerte y rendimientos altos suelen presionar al oro.</p>
+              </div>
+              <span className={`text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap ${
+                macroData?.regime?.tone === 'tailwind'
+                  ? 'bg-green-500/15 text-green-400'
+                  : macroData?.regime?.tone === 'headwind'
+                    ? 'bg-red-500/15 text-red-400'
+                    : 'bg-yellow-500/10 text-yellow-400'
+              }`}>
+                {macroData?.regime?.label || 'Cargando…'}
+              </span>
+            </div>
+            <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
+              <MacroQuote
+                label={`Dólar (${macroData?.symbols?.dollar || 'USD/CRC'})`}
+                value={macroData?.dollar?.value?.toFixed(2)}
+                change={macroData?.dollar?.percentChange}
+                tone={macroData?.dollar?.percentChange == null
+                  ? 'neutral'
+                  : macroData.dollar.percentChange > 0 ? 'negative' : 'positive'}
+              />
+              <MacroQuote
+                label={`Treasury (${macroData?.symbols?.bond || 'US2Y'})`}
+                value={macroData?.bond?.value?.toFixed(3)}
+                suffix='%'
+                change={macroData?.bond?.percentChange}
+                tone={macroData?.bond?.percentChange == null
+                  ? 'neutral'
+                  : macroData.bond.percentChange > 0 ? 'negative' : 'positive'}
+              />
+            </div>
+            <p className='text-[11px] text-gray-600 mt-3'>
+              {macroData?.regime?.detail || 'El contexto macro se actualizará junto con los datos de mercado.'}
+              {' '}Es una guía de contexto, no una señal automática de entrada.
+            </p>
+          </div>
+
+          {/* CARD 3: Indicadores ──────────────────────────────────────── */}
           {indicators && (
             <div className='bg-gradient-to-br from-[#1a1b22] to-[#121318] rounded-2xl p-5 shadow-lg'>
               <p className='text-sm text-gray-400 mb-3'>Indicadores ({timeframe})</p>
@@ -277,7 +348,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* CARD 3: Targets ──────────────────────────────────────────── */}
+          {/* CARD 4: Targets ──────────────────────────────────────────── */}
           {data && (
             <div className='bg-gradient-to-br from-[#1a1b22] to-[#121318] rounded-2xl p-5 shadow-lg'>
               <p className='text-sm text-gray-400 mb-3'>Targets ({timeframe})</p>
@@ -314,7 +385,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* CARD 4: Pivot Points ─────────────────────────────────────── */}
+          {/* CARD 5: Pivot Points ─────────────────────────────────────── */}
           {data?.pivots && (
             <div className='bg-gradient-to-br from-[#1a1b22] to-[#121318] rounded-2xl p-5 shadow-lg'>
               <p className='text-sm text-gray-400 mb-3'>Pivot Points ({timeframe})</p>
@@ -328,7 +399,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* CARD 5: Price Alerts ─────────────────────────────────────── */}
+          {/* CARD 6: Price Alerts ─────────────────────────────────────── */}
           <div className='bg-gradient-to-br from-[#1a1b22] to-[#121318] rounded-2xl p-5 shadow-lg'>
             <p className='text-sm text-gray-400 mb-3'>Price Alerts</p>
             <form onSubmit={handleAddAlert} className='flex gap-2 mb-3'>
@@ -375,7 +446,7 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* CARD 6: Alarma de Rebote en Soporte Alcista ─────────────── */}
+          {/* CARD 7: Alarma de Rebote en Soporte Alcista ─────────────── */}
           <div className='bg-gradient-to-br from-[#1a1b22] to-[#121318] rounded-2xl p-5 shadow-lg'>
             <p className='text-sm text-gray-400 mb-4'>Alarma de Rebote en Soporte</p>
 
@@ -440,7 +511,7 @@ export default function Dashboard() {
                         {formatPrice(alarm.price)}
                       </span>
                       <span className='text-gray-600'>
-                        {formatElapsed(Math.floor((Date.now() - alarm.triggeredAt) / 1000))}
+                        {now ? formatElapsed(Math.floor((now - alarm.triggeredAt) / 1000)) : 'just now'}
                       </span>
                     </div>
                   ))}

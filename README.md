@@ -10,6 +10,7 @@ Dashboard para monitorear `XAU/USD` con precio live, targets, pivot points, aler
 ## Funcionalidades
 
 - Precio live de oro usando TwelveData.
+- Contexto macro con dólar (`USD/CRC`) y rendimiento del Treasury a 2 años (`US2Y`).
 - Indicadores técnicos por timeframe: `RSI`, `EMA 9`, `EMA 21`.
 - Cálculo de `bullish target`, `bearish target`, rango y pivot points.
 - Alertas de precio persistidas localmente.
@@ -30,6 +31,8 @@ El proyecto usa un archivo `.env` en la raíz:
 
 ```env
 VITE_TWELVE_API_KEY=tu_twelve_data_key
+VITE_DOLLAR_SYMBOL=USD/CRC
+VITE_BOND_SYMBOL=US2Y
 ```
 
 ## Desarrollo local
@@ -63,3 +66,8 @@ npm run preview
 ## Notas
 
 - TwelveData entrega precio live, OHLC diario e indicadores de `XAU/USD`.
+- El contexto macro se consulta cada 10 minutos y no bloquea el dashboard si un
+  símbolo no está disponible en el plan o proveedor configurado.
+- En esta primera versión se usa el rendimiento nominal del Treasury disponible
+  en la cuenta (`US2Y`); para una lectura macro más precisa, la siguiente mejora
+  recomendada es añadir el rendimiento real de 10 años y expectativas de inflación.

@@ -24,6 +24,7 @@ import {
   getGoldIntraday,
   getGoldQuote,
   getGoldRSI,
+  getMacroQuotes,
 } from '../api/twelveData';
 import {
   calculateATR,
@@ -45,10 +46,53 @@ import { isValidNumber } from '../utils/validate';
 
 // 2 minutos = 30 req/hora, suficiente para el polling de precio
 const PRICE_REFRESH_MS = 2 * 60 * 1000;
+const MACRO_REFRESH_MS = 10 * 60 * 1000;
+
+function normalizeMacroQuote(quote, type) {
+  if (!quote) return null;
+
+  const value = Number(quote.price ?? quote.close);
+  if (!isValidNumber(value)) return null;
+
+  const change = Number(quote.change ?? 0);
+  const percentChange = Number(quote.percent_change ?? 0);
+
+  return {
+    type,
+    symbol: quote.symbol,
+    name: quote.name,
+    value: +value.toFixed(type === 'bond' ? 3 : 2),
+    change: isValidNumber(change) ? +change.toFixed(3) : 0,
+    percentChange: isValidNumber(percentChange) ? +percentChange.toFixed(2) : 0,
+    timestamp: Number(quote.timestamp ?? Date.now() / 1000),
+  };
+}
+
+function getMacroRegime(dollar, bond) {
+  const dollarUp = dollar?.percentChange > 0.1;
+  const dollarDown = dollar?.percentChange < -0.1;
+  const bondUp = bond?.percentChange > 0.1;
+  const bondDown = bond?.percentChange < -0.1;
+
+  if (dollarUp && bondUp) {
+    return { label: 'Presión bajista', tone: 'headwind', detail: 'Dólar y rendimiento suben' };
+  }
+  if (dollarDown && bondDown) {
+    return { label: 'Viento a favor', tone: 'tailwind', detail: 'Dólar y rendimiento bajan' };
+  }
+  if (dollarUp || bondUp) {
+    return { label: 'Mixto / presión', tone: 'mixed', detail: 'Un factor resta apoyo al oro' };
+  }
+  if (dollarDown || bondDown) {
+    return { label: 'Mixto / apoyo', tone: 'mixed', detail: 'Un factor favorece al oro' };
+  }
+  return { label: 'Sin señal clara', tone: 'neutral', detail: 'Cambios diarios moderados' };
+}
 
 export function useGoldTarget() {
   const [price, setPrice]             = useState(null);
   const [quoteData, setQuoteData]     = useState(null);   // change, %, prevClose
+  const [macroData, setMacroData]     = useState(null);   // Dollar + Treasury context
   const [data, setData]               = useState(null);   // targets, pivots, atr, status
   const [indicators, setIndicators]   = useState(null);   // rsi, ema9, ema21
   const [timeframe, setTimeframe]     = useState('1D');
@@ -58,6 +102,7 @@ export function useGoldTarget() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [alerts, setAlerts]           = useState(() => getAlerts());
   const [retryCount, setRetryCount]   = useState(0);
+  const [macroRetryCount, setMacroRetryCount] = useState(0);
 
   const prevPriceRef = useRef(null);
 
@@ -193,6 +238,42 @@ export function useGoldTarget() {
     return () => controller.abort();
   }, [retryCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Effect 3: Macro Refresh — dollar + Treasury ─────────────────────────
+  // Se actualiza mucho menos que el precio del oro: el dólar y los bonos
+  // sirven como contexto, no como un tick-by-tick trigger.
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadMacro() {
+      try {
+        const quotes = await getMacroQuotes(controller.signal);
+        const dollar = normalizeMacroQuote(quotes.dollar, 'dollar');
+        const bond = normalizeMacroQuote(quotes.bond, 'bond');
+
+        setMacroData({
+          dollar,
+          bond,
+          regime: getMacroRegime(dollar, bond),
+          symbols: quotes.symbols,
+          updatedAt: Date.now(),
+        });
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        // El panel macro es informativo: no debe tumbar el precio del oro.
+        console.warn('Macro context fetch failed (non-blocking):', err.message);
+      }
+    }
+
+    loadMacro();
+    return () => controller.abort();
+  }, [macroRetryCount]);
+
+  useEffect(() => {
+    if (!isMarketOpen()) return;
+    const id = setInterval(() => setMacroRetryCount(c => c + 1), MACRO_REFRESH_MS);
+    return () => clearInterval(id);
+  }, []);
+
   // ── Effect 2: Indicators Refresh — TwelveData ────────────────────────────
   // Solo corre al CAMBIAR el timeframe (no en el polling de precio).
   // Esto limita TwelveData a ~4 créditos por cambio de timeframe → sin 429.
@@ -257,7 +338,10 @@ export function useGoldTarget() {
 
   // ── API pública ───────────────────────────────────────────────────────────
 
-  const refresh = useCallback(() => setRetryCount(c => c + 1), []);
+  const refresh = useCallback(() => {
+    setRetryCount(c => c + 1);
+    setMacroRetryCount(c => c + 1);
+  }, []);
 
   const addAlert = useCallback((price) => {
     setAlerts(persistAddAlert(price));
@@ -270,6 +354,7 @@ export function useGoldTarget() {
   return {
     price,
     quoteData,
+    macroData,
     data,
     indicators,
     timeframe,
