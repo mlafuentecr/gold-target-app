@@ -113,6 +113,44 @@ export function calculateATR(candles) {
   return +atr.toFixed(2);
 }
 
+// ─── Indicadores locales ─────────────────────────────────────────────────────
+
+/**
+ * RSI local para evitar una llamada adicional al proveedor por timeframe.
+ * TwelveData entrega las velas newest-first; aquí se recorren en orden
+ * cronológico para que el cálculo sea consistente.
+ */
+export function calculateRSI(candles, period = 14) {
+  if (!candles || candles.length < period + 1) return null;
+
+  const closes = [...candles].reverse().map(c => Number(c.close));
+  const changes = closes.slice(1).map((close, index) => close - closes[index]);
+  const recent = changes.slice(-period);
+  const gains = recent.filter(change => change > 0).reduce((sum, change) => sum + change, 0);
+  const losses = recent.filter(change => change < 0).reduce((sum, change) => sum + Math.abs(change), 0);
+
+  if (losses === 0) return 100;
+  const relativeStrength = (gains / period) / (losses / period);
+  return +(100 - (100 / (1 + relativeStrength))).toFixed(1);
+}
+
+/**
+ * EMA local usando todas las velas disponibles del timeframe.
+ */
+export function calculateEMA(candles, period = 9) {
+  if (!candles || candles.length < period) return null;
+
+  const closes = [...candles].reverse().map(c => Number(c.close));
+  let ema = closes.slice(0, period).reduce((sum, close) => sum + close, 0) / period;
+  const multiplier = 2 / (period + 1);
+
+  for (const close of closes.slice(period)) {
+    ema = (close - ema) * multiplier + ema;
+  }
+
+  return +ema.toFixed(2);
+}
+
 // ─── Price Status ─────────────────────────────────────────────────────────────
 
 /**

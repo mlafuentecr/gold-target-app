@@ -116,11 +116,12 @@ export async function getMacroQuotes(signal) {
 // ─── Series de tiempo ─────────────────────────────────────────────────────────
 
 /**
- * Serie diaria (2 velas: hoy + ayer).
+ * Serie diaria. Se solicitan suficientes velas para calcular indicadores
+ * localmente sin consumir endpoints RSI/EMA adicionales.
  * @param {AbortSignal} [signal]
  */
-export async function getGoldDaily(signal) {
-  const url = `${BASE_URL}/time_series?symbol=XAU/USD&interval=1day&outputsize=2&apikey=${API_KEY}`;
+export async function getGoldDaily(signal, outputsize = 100) {
+  const url = `${BASE_URL}/time_series?symbol=XAU/USD&interval=1day&outputsize=${outputsize}&apikey=${API_KEY}`;
   return fetchWithValidation(url, signal);
 }
 

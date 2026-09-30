@@ -12,6 +12,7 @@ Dashboard para monitorear `XAU/USD` con precio live, targets, pivot points, aler
 - Precio live de oro usando TwelveData.
 - Contexto macro con dólar (`USD/CRC`) y rendimiento del Treasury a 2 años (`US2Y`).
 - Alertas visuales para eventos macro de alto impacto que pueden mover XAU/USD.
+- RSI y EMA se calculan localmente para reducir el consumo de TwelveData.
 - Indicadores técnicos por timeframe: `RSI`, `EMA 9`, `EMA 21`.
 - Cálculo de `bullish target`, `bearish target`, rango y pivot points.
 - Alertas de precio persistidas localmente.
@@ -74,3 +75,5 @@ npm run preview
   recomendada es añadir el rendimiento real de 10 años y expectativas de inflación.
 - El calendario visual de eventos se mantiene como una lista curada en
   `src/utils/economicEvents.js` y debe actualizarse cuando se publiquen nuevas fechas.
+- El precio se actualiza cada 5 minutos durante el mercado abierto y el último
+  snapshot válido se conserva localmente para tolerar límites temporales (`429`).

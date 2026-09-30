@@ -9,10 +9,12 @@
  *   → Chequea alarma de rebote (Zustand) y alertas de precio (localStorage)
  *   → Auto-refresh cada 2 min (solo mercado abierto)
  *
- * Effect 2 — "Indicators Refresh" [timeframe]
- *   → Llama RSI + EMA9 + EMA21 + time_series a TwelveData
- *   → Solo corre cuando el usuario CAMBIA el timeframe
- *   → 4 créditos TwelveData — una sola vez por cambio
+ * Effect 2 — "Macro Refresh" [macroRetryCount]
+ *   → Consulta dólar + Treasury agrupados cada 10 minutos
+ *
+ * Effect 3 — "Indicators Refresh" [timeframe, dailySeries]
+ *   → Calcula RSI + EMA9 + EMA21 localmente desde las velas
+ *   → Solo pide una serie intradía al cambiar a 1H/4H
  *   → Actualiza indicators y ATR sin tocar el precio
  */
 
@@ -20,15 +22,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   getGoldDaily,
-  getGoldEMA,
   getGoldIntraday,
   getGoldQuote,
-  getGoldRSI,
   getMacroQuotes,
 } from '../api/twelveData';
 import {
   calculateATR,
+  calculateEMA,
   calculatePivotPoints,
+  calculateRSI,
   getPriceStatus,
 } from '../services/goldTarget.service';
 import { useGoldStore } from '../store/goldStore';
@@ -44,9 +46,27 @@ import {
 import { isMarketOpen } from '../utils/marketTime';
 import { isValidNumber } from '../utils/validate';
 
-// 2 minutos = 30 req/hora, suficiente para el polling de precio
-const PRICE_REFRESH_MS = 2 * 60 * 1000;
+// Cinco minutos reduce el riesgo de agotar créditos sin perder contexto útil.
+const PRICE_REFRESH_MS = 5 * 60 * 1000;
 const MACRO_REFRESH_MS = 10 * 60 * 1000;
+const MARKET_CACHE_KEY = 'gold-target-market-cache';
+
+function readMarketCache() {
+  try {
+    const raw = localStorage.getItem(MARKET_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveMarketCache(snapshot) {
+  try {
+    localStorage.setItem(MARKET_CACHE_KEY, JSON.stringify(snapshot));
+  } catch {
+    // El cache es opcional; no debe bloquear el dashboard.
+  }
+}
 
 function normalizeMacroQuote(quote, type) {
   if (!quote) return null;
@@ -90,19 +110,21 @@ function getMacroRegime(dollar, bond) {
 }
 
 export function useGoldTarget() {
-  const [price, setPrice]             = useState(null);
-  const [quoteData, setQuoteData]     = useState(null);   // change, %, prevClose
+  const [initialMarket]               = useState(readMarketCache);
+  const [price, setPrice]             = useState(initialMarket?.price ?? null);
+  const [quoteData, setQuoteData]     = useState(initialMarket?.quoteData ?? null);   // change, %, prevClose
   const [macroData, setMacroData]     = useState(null);   // Dollar + Treasury context
-  const [data, setData]               = useState(null);   // targets, pivots, atr, status
+  const [data, setData]               = useState(initialMarket?.data ?? null);   // targets, pivots, atr, status
   const [indicators, setIndicators]   = useState(null);   // rsi, ema9, ema21
   const [timeframe, setTimeframe]     = useState('1D');
-  const [loading, setLoading]         = useState(true);
+  const [loading, setLoading]         = useState(!initialMarket?.price);
   const [error, setError]             = useState(null);
   const [priceSource, setPriceSource] = useState('TwelveData');
-  const [lastUpdated, setLastUpdated] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(initialMarket?.lastUpdated ?? null);
   const [alerts, setAlerts]           = useState(() => getAlerts());
   const [retryCount, setRetryCount]   = useState(0);
   const [macroRetryCount, setMacroRetryCount] = useState(0);
+  const [dailySeries, setDailySeries] = useState(null);
 
   const prevPriceRef = useRef(null);
 
@@ -127,7 +149,7 @@ export function useGoldTarget() {
 
         const [quote, daily] = await Promise.all([
           getGoldQuote(signal),
-          getGoldDaily(signal),
+          getGoldDaily(signal, 100),
         ]);
 
         const currentCandle = daily?.values?.[0];
@@ -224,11 +246,24 @@ export function useGoldTarget() {
         }));
         setPriceSource('TwelveData');
         setLastUpdated(Date.now());
+        setDailySeries(daily);
+        saveMarketCache({
+          price: livePrice,
+          quoteData: {
+            change: isValidNumber(change) ? +change.toFixed(2) : 0,
+            percentChange: isValidNumber(percentChange) ? +percentChange.toFixed(2) : 0,
+            prevClose: isValidNumber(prevClose) && prevClose > 0 ? +prevClose.toFixed(2) : null,
+            week52High: isValidNumber(quote?.fifty_two_week?.high) ? +Number(quote.fifty_two_week.high).toFixed(2) : null,
+            week52Low: isValidNumber(quote?.fifty_two_week?.low) ? +Number(quote.fifty_two_week.low).toFixed(2) : null,
+          },
+          data: { ...targets, atr: data?.atr ?? null, pivots, status },
+          lastUpdated: Date.now(),
+        });
 
       } catch (err) {
         if (err.name === 'AbortError') return;
         console.error('Price provider error:', err.message);
-        setError(err.message || 'Error al obtener precio del mercado');
+        setError(price ? `${err.message || 'Error al obtener precio del mercado'} — mostrando el último dato disponible` : err.message || 'Error al obtener precio del mercado');
       } finally {
         setLoading(false);
       }
@@ -238,7 +273,7 @@ export function useGoldTarget() {
     return () => controller.abort();
   }, [retryCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Effect 3: Macro Refresh — dollar + Treasury ─────────────────────────
+  // ── Effect 2: Macro Refresh — dollar + Treasury ─────────────────────────
   // Se actualiza mucho menos que el precio del oro: el dólar y los bonos
   // sirven como contexto, no como un tick-by-tick trigger.
   useEffect(() => {
@@ -274,46 +309,31 @@ export function useGoldTarget() {
     return () => clearInterval(id);
   }, []);
 
-  // ── Effect 2: Indicators Refresh — TwelveData ────────────────────────────
-  // Solo corre al CAMBIAR el timeframe (no en el polling de precio).
-  // Esto limita TwelveData a ~4 créditos por cambio de timeframe → sin 429.
+  // ── Effect 3: Indicators Refresh — local + one series ─────────────────────
+  // RSI y EMA se calculan localmente. Solo 1H/4H necesita una serie nueva;
+  // 1D reutiliza las velas diarias que ya pidió el efecto de precio.
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
 
-    function indicatorInterval() {
-      if (timeframe === '1H') return '1h';
-      if (timeframe === '4H') return '4h';
-      return '1day';
-    }
-
     async function loadIndicators() {
       try {
-        const tfInterval = indicatorInterval();
-
-        const fetchSeries = () => {
-          if (timeframe === '1H') return getGoldIntraday('1min', 60, signal);
-          if (timeframe === '4H') return getGoldIntraday('15min', 16, signal);
-          return getGoldDaily(signal);
-        };
-
-        const [seriesJson, rsiJson, ema9Json, ema21Json] = await Promise.all([
-          fetchSeries(),
-          getGoldRSI(tfInterval, signal).catch(() => null),
-          getGoldEMA(tfInterval, 9, signal).catch(() => null),
-          getGoldEMA(tfInterval, 21, signal).catch(() => null),
-        ]);
+        let seriesJson = dailySeries;
+        if (timeframe === '1H') seriesJson = await getGoldIntraday('1min', 120, signal);
+        if (timeframe === '4H') seriesJson = await getGoldIntraday('15min', 32, signal);
 
         // ATR desde series de velas
         let atr = null;
+        let rsi = null;
+        let ema9 = null;
+        let ema21 = null;
         if (seriesJson?.values?.length) {
           const candles = extractOHLC(seriesJson.values);
           atr = calculateATR(candles);
+          rsi = calculateRSI(candles);
+          ema9 = calculateEMA(candles, 9);
+          ema21 = calculateEMA(candles, 21);
         }
-
-        const rsi   = rsiJson?.values?.[0]?.rsi   ? +Number(rsiJson.values[0].rsi).toFixed(1)   : null;
-        const ema9  = ema9Json?.values?.[0]?.ema   ? +Number(ema9Json.values[0].ema).toFixed(2)  : null;
-        const ema21 = ema21Json?.values?.[0]?.ema  ? +Number(ema21Json.values[0].ema).toFixed(2) : null;
 
         setData(prev => prev ? { ...prev, atr } : null);
         setIndicators({ rsi, ema9, ema21 });
@@ -327,7 +347,7 @@ export function useGoldTarget() {
 
     loadIndicators();
     return () => controller.abort();
-  }, [timeframe]);
+  }, [timeframe, dailySeries]);
 
   // ── Auto-refresh de precio (solo mercado abierto) ─────────────────────────
   useEffect(() => {
