@@ -20,6 +20,11 @@ import {
   getNextMarketEvent,
   getSessionName,
 } from '../utils/marketTime';
+import {
+  formatCountdown,
+  formatEventTime,
+  getUpcomingGoldEvents,
+} from '../utils/economicEvents';
 
 // ─── Componentes reutilizables ────────────────────────────────────────────────
 
@@ -119,6 +124,65 @@ function MacroQuote({ label, value, change, suffix = '', tone = 'neutral' }) {
   );
 }
 
+function GoldEventAlert({ events, now }) {
+  if (!events.length) return null;
+
+  const nextEvent = events[0];
+  return (
+    <div className='mb-4 rounded-2xl border border-orange-400/30 bg-gradient-to-br from-orange-500/15 to-[#1a1b22] p-4 shadow-lg'>
+      <div className='flex items-start justify-between gap-3'>
+        <div>
+          <p className='text-xs font-bold uppercase tracking-wide text-orange-300'>
+            ⚠ Alerta de alto impacto para el oro
+          </p>
+          <p className='mt-1 text-sm font-semibold text-white'>
+            Próximo evento: {nextEvent.title}
+          </p>
+        </div>
+        <span className='whitespace-nowrap rounded-full bg-orange-400/15 px-2 py-1 text-xs font-semibold text-orange-300'>
+          {formatCountdown(nextEvent.timestamp, now)}
+        </span>
+      </div>
+
+      <div className='mt-3 grid gap-2 sm:grid-cols-2'>
+        {events.map(event => (
+          <div key={event.id} className='rounded-xl bg-black/20 px-3 py-2'>
+            <div className='flex items-center justify-between gap-2'>
+              <span className='text-sm font-semibold text-gray-200'>{event.title}</span>
+              <span className='text-[10px] font-bold uppercase text-orange-300'>{event.impact}</span>
+            </div>
+            <p className='mt-1 text-xs text-gray-400'>{formatEventTime(event.timestamp)} NY</p>
+            <p className='mt-1 text-xs leading-relaxed text-gray-500'>{event.why}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className='mt-3 grid gap-2 sm:grid-cols-2'>
+        <div className='rounded-xl border border-red-400/15 bg-red-400/5 px-3 py-2'>
+          <p className='text-xs font-bold text-red-300'>Si suben las tasas / rendimientos ↑</p>
+          <p className='mt-1 text-xs leading-relaxed text-gray-400'>
+            El oro suele enfrentar presión porque los bonos y el efectivo pagan más.
+            El dólar también puede fortalecerse.
+          </p>
+        </div>
+        <div className='rounded-xl border border-green-400/15 bg-green-400/5 px-3 py-2'>
+          <p className='text-xs font-bold text-green-300'>Si bajan las tasas / rendimientos ↓</p>
+          <p className='mt-1 text-xs leading-relaxed text-gray-400'>
+            El oro suele recibir apoyo porque baja el costo de oportunidad. El dólar
+            puede debilitarse.
+          </p>
+        </div>
+      </div>
+
+      <p className='mt-3 text-xs leading-relaxed text-orange-100/70'>
+        Importante: no es una regla automática. Si las tasas suben por inflación o las
+        bajan por miedo a recesión, el oro puede reaccionar distinto. Confirma siempre
+        con XAU/USD, dólar y US2Y; no abras una operación solo por el titular.
+      </p>
+    </div>
+  );
+}
+
 // ─── Dashboard principal ──────────────────────────────────────────────────────
 
 export default function Dashboard() {
@@ -177,6 +241,7 @@ export default function Dashboard() {
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
   const isPositive = (quoteData?.change ?? 0) >= 0;
+  const upcomingGoldEvents = now ? getUpcomingGoldEvents(now) : [];
 
   // ── Loading ───────────────────────────────────────────────────────────────
   if (loading) {
@@ -193,14 +258,17 @@ export default function Dashboard() {
   // ── Error fatal (sin precio aún) ──────────────────────────────────────────
   if (error && !price) {
     return (
-      <div className='min-h-screen bg-[#0b0c10] text-red-400 flex items-center justify-center px-6 text-center'>
-        <div className='space-y-3'>
-          <p className='text-lg font-semibold'>Error de datos</p>
-          <p className='text-sm opacity-80'>{error}</p>
-          <button onClick={refresh}
-            className='px-4 py-1.5 rounded-full bg-[#f5c77a] text-black text-sm font-semibold hover:opacity-90 transition'>
-            Reintentar
-          </button>
+      <div className='min-h-screen bg-[#0b0c10] text-red-400 flex items-center justify-center px-4'>
+        <div className='w-full max-w-3xl'>
+          <GoldEventAlert events={upcomingGoldEvents} now={now} />
+          <div className='space-y-3 text-center'>
+            <p className='text-lg font-semibold'>Error de datos</p>
+            <p className='text-sm opacity-80'>{error}</p>
+            <button onClick={refresh}
+              className='px-4 py-1.5 rounded-full bg-[#f5c77a] text-black text-sm font-semibold hover:opacity-90 transition'>
+              Reintentar
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -217,6 +285,8 @@ export default function Dashboard() {
             <span className='text-xs text-gray-500'>Updated {formatElapsed(elapsed)}</span>
           )}
         </header>
+
+        <GoldEventAlert events={upcomingGoldEvents} now={now} />
 
         {/* ═══════════════════════════════════════════════════════════════ */}
         {/* CARD 1: Precio — siempre full width                            */}
